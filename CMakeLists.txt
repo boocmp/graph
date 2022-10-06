@@ -14,7 +14,7 @@ project (SDL_bgi VERSION ${SDL_BGI_VERSION} LANGUAGES C)
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s")
 
 set(SDL2_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/sdl2/include)
-set(SDL2_LIBRARY ${PROJECT_SOURCE_DIR}/sdl2/lib/x86/SDL2.lib)
+set(SDL2_LIBRARY ${PROJECT_SOURCE_DIR}/sdl2/lib/arm/SDL2)
 
 # Include SDL2 support for cmake
 include_directories(${SDL2_INCLUDE_DIR})
