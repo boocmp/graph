@@ -3,6 +3,12 @@
 #include <string.h>
 #include <math.h>
 #include <graphics.h>
+#include <vector>
+#include <chrono>
+#include <thread>
+#include <iostream>
+
+using namespace std::chrono_literals;
 
 #undef main
 
@@ -79,20 +85,28 @@ class Snake : public Updatable {
     void SetDirection(Direction dir) {
       if (dir == NONE)
         return;
-      // TODO(): Add some logic
+      switch (dir) {
+        case NONE:
+        return;
+        case LEFT: if (direction == RIGHT) return;
+        case RIGHT: if (direction == LEFT) return;
+        case UP: if (direction == DOWN) return;
+        case DOWN: if (direction == UP) return;
+      }
       direction = dir;
     }
 
     void Update(float dt) override {
+      vec2 head = chain[0];
       switch (direction) {
         case NONE: return;
-        case UP: {
-          vec2 head = chain[0];
-          head.y += 1;
-          chain.push_front(head);
-          chain.pop_back();
-        }break;
+        case UP: head.y--; break;
+        case DOWN: head.y++; break;
+        case RIGHT: head.x++; break;
+        case LEFT: head.x--; break;
       }
+      chain.insert(chain.begin(), head);
+      chain.pop_back();
     }
 
   private:
@@ -100,23 +114,20 @@ class Snake : public Updatable {
    Direction direction;
 };
 
+constexpr const auto kQuant = 1000ms;
+
 class Game {
   public:
-    Game() {
+    Game() : snake({0, 0}) {
     }
 
     ~Game() = default;
 
-    void Update(float dt) {
-      const float quant = 0.01f;
-      for (float t = 0; t < dt; t += quant) {
-        for (Updatable* u: updatable) {
+    void Update(float quant) {
+      std::cout << quant << std::endl;
+      for (Updatable* u: updatable) {
           u->Update(quant);
-        }
       }
-      // new state:
-      // Check Consistency
-
     }
 
     void Render() {
@@ -125,7 +136,9 @@ class Game {
       }
     }
 
-    void HandleInput();
+    void HandleInput() {
+
+    }
 
     bool IsOver() const {
       return is_over;
@@ -137,21 +150,40 @@ class Game {
 
    std::vector<Updatable*> updatable;
    std::vector<Renderable*> renderable;
+   bool is_over = false;
 };
-
-int GetTicks();
 
 int main (int argc, char *argv[])
 {
+
+    int gd = SDL;
+    int gm = SDL_800x600;
+    char s[] = "";
+    initgraph (&gd, &gm, s);
+    setbkcolor (BLACK);
+    cleardevice ();
+
+    using clock = std::chrono::high_resolution_clock;
+
     Game game;
-    int ticks = GetTicks();
+    auto ticks = clock::now();
     while (!game.IsOver()) {
+      auto delta = clock::now() - ticks;
+      ticks = clock::now();
+      if (delta < kQuant) {
+        std::this_thread::sleep_for(kQuant / 2);
+      }
       game.Render();
+      refresh();
       game.HandleInput();
-      game.Update(GetTicks() - ticks);
-      ticks = GetTicks();
+
+      while (delta >= kQuant) {
+        game.Update(std::chrono::duration_cast<std::chrono::milliseconds>(kQuant).count());
+        delta -= kQuant;
+      }
     }
 
+    closegraph ();
     return 0;
 } // main ()
 

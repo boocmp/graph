@@ -6,15 +6,14 @@
 cmake_minimum_required (VERSION 3.5.0)
 
 set (SDL_BGI_VERSION 2.3.0)
-
+set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE INTERNAL "" FORCE)
 # Project name
 project (SDL_bgi VERSION ${SDL_BGI_VERSION} LANGUAGES C)
 
 # Strip the library after building
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s")
 
-set(SDL2_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/sdl2/include)
-set(SDL2_LIBRARY ${PROJECT_SOURCE_DIR}/sdl2/lib/arm/SDL2)
+find_package (SDL2 REQUIRED)
 
 # Include SDL2 support for cmake
 include_directories(${SDL2_INCLUDE_DIR})
@@ -108,7 +107,12 @@ endif (EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
 project(game)
 set(SOURCE_FILES ${PROJECT_SOURCE_DIR}/test/plasma.cpp)
 add_executable(game ${SOURCE_FILES})
-target_link_libraries(game SDL_bgi)
+target_link_libraries(
+    game PRIVATE
+    SDL2::SDL2
+    SDL2::SDL2main
+    SDL_bgi)
+set_target_properties(game PROPERTIES CXX_STANDARD 17)
 
 
 # End of file CMakeLists.txt
