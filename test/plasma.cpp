@@ -1,4 +1,5 @@
 #include <vector>
+#include <memory>
 #include <graphics.h>
 
 #undef main
@@ -6,28 +7,42 @@
 class Cell {
   public:
    virtual ~Cell() = default;
-   virtual void Render() = 0;
+   virtual void Render(int x, int y) = 0;
+};
+
+class EmptyCell : public Cell {
+  public:
+  void Render(int x, int y) override {
+
+  }
 };
 
 class GameField {
   public:
-   GameFields(int w = 12, int h = 24);
+   GameField(int w = 24, int h = 24) {
+     fields.resize(w);
+     for (auto& column: fields) {
+       column.resize(h);
+       for (auto& cell : column) {
+         cell = std::make_unique<EmptyCell>();
+       }
+     }
+   }
 
    int GetWidth() const { return fields.size(); }
    int GetHeight() const { return fields[0].size(); }
 
    void Render() {
      // Render background
-     for (int x = 0; x < GetWidth(); ++x)
+     for (int x = 0; x < GetWidth(); ++x) {
        for (int y = 0; y < GetHeight(); ++y) {
-          Coords cell_coors = {x, y};
-          fields[x][y]->Render();
+          fields[x][y]->Render(x , y);
        }
      }
    }
 
   private:
-   std::vector<std::vector<Cell*>> fields;
+   std::vector<std::vector<std::unique_ptr<Cell>>> fields;
 };
 
 struct Coords {
@@ -67,15 +82,18 @@ class Snake {
 
      Coords new_head = units[0];
      switch (direction) {
-       case UP: {
-         new_head.y--;
-       }break;
-       case RIGHT: {
-         new_head.x += 1;
-       }break;
+       case NONE: return;
+       case UP: new_head.y--; break;
+       case DOWN: new_head.y++; break;
+       case RIGHT: new_head.x++; break;
+       case LEFT: new_head.x--; break;
      }
-     units.push_front(new_head);
-     units.pop_pack();
+     units.insert(units.begin(), new_head);
+     units.pop_back();
+   }
+
+   void Render() {
+
    }
 
   private:
@@ -85,7 +103,7 @@ class Snake {
 
 class Game {
   public:
-   Game() {}
+   Game() : snake({game_field.GetWidth()/2, game_field.GetHeight()/2}) {}
 
    bool IsOver() const {
      return is_over;
@@ -97,19 +115,10 @@ class Game {
    }
 
    void ProcessInput() {
-      int key = GetPressedKey();
-      if (!key)
-        return;
-      switch (key) {
-        case 'w':
-          snake.SetDirection(UP);
-        break;
-      }
    }
 
    void UpdateState(int dt) {
      snake.UpdateState();
-     game_field.UpdateState();
      CheckRules();
    }
 
@@ -128,12 +137,10 @@ int GetTicks();
 
 int main (int argc, char *argv[]) {
   Game game;
-  int time = GetTicks();
   while (!game.IsOver()) {
     game.ProcessInput();
     game.Render();
-    game.UpdateState(GetTicks() - time);
-    time = GetTicks();
+    game.UpdateState(16);
   }
   return 0;
 }
