@@ -10,8 +10,6 @@
 
 using namespace std::chrono_literals;
 
-#undef main
-
 // 1. GameField
    // -- cells : usual, tunnel, wall
 // 2. Snake
@@ -31,19 +29,70 @@ class Updatable {
   virtual void Update(float dt) = 0;
 };
 
-class Cell {
+class Cell : public Renderable {
   public:
+   static constexpr const int kCellWidth = 24;
+   static constexpr const int kCellHeight = 24;
    virtual ~Cell() = default;
 };
 
-class GameField {
+class EmptyCell : public Cell {
   public:
+   EmptyCell(int _x, int _y): x(_x), y(_y) {}
+
+   void Render() override {
+    setcolor(WHITE);
+    rectangle(x * kCellWidth, y * kCellHeight,
+             (x+1)*kCellWidth, (y+1)*kCellHeight);
+   }
+
+  private:
+   int x = 0;
+   int y = 0;
+};
+
+class GameField : public Renderable {
+  public:
+    GameField(int w, int h) : width(w), height(h) {
+      cells.resize(width);
+      for (auto& column: cells) {
+        column.resize(height);
+      }
+      for (int x = 0; x < w; ++x) {
+        for (int y = 0; y < h; ++y) {
+          cells[x][y] = std::make_unique<EmptyCell>(x, y);
+        }
+      }
+    }
     virtual ~GameField() = default;
 
-    int GetWidth() const;
-    int GetHeight() const;
+    int GetWidth() const {
+      return width;
+    }
+    int GetHeight() const {
+      return height;
+    }
 
-    Cell* GetCell(int x, int y) const;
+    Cell* GetCell(int x, int y) const {
+      return cells[x][y].get();
+    }
+
+    void Render() override {
+      const int kCellWidth = 16;
+      const int kCellHeight = 16;
+
+      for (int x = 0; x < GetWidth(); ++x) {
+        for (int y = 0; y < GetHeight(); ++y) {
+          Cell* cell = GetCell(x, y);
+          cell->Render();
+        }
+      }
+    }
+
+  private:
+    int width = 0;
+    int height = 0;
+    std::vector<std::vector<std::unique_ptr<Cell>>> cells;
 };
 
 class Food {
@@ -53,6 +102,10 @@ class Food {
 
 struct vec2 {
   int x, y;
+
+  bool operator ==(const vec2& v) const {
+    return x == v.x && y == v.y;
+  }
 };
 
 enum Direction {
@@ -63,7 +116,7 @@ enum Direction {
   RIGHT,
 };
 
-class Snake : public Updatable {
+class Snake : public Updatable, public Renderable {
   public:
     explicit Snake(const vec2& start_position) {
       chain.push_back(start_position);
@@ -76,6 +129,10 @@ class Snake : public Updatable {
 
     const std::vector<vec2>& GetChain() const {
       return chain;
+    }
+
+    const vec2& GetHead() const {
+      return GetChain()[0];
     }
 
     Direction GetDirection() const {
@@ -109,6 +166,14 @@ class Snake : public Updatable {
       chain.pop_back();
     }
 
+    void Render() override {
+      setcolor(YELLOW);
+      for (const vec2& c: chain) {
+        circle(c.x * Cell::kCellWidth + Cell::kCellWidth/2,
+               c.y * Cell::kCellHeight + Cell::kCellHeight/2, 7);
+      }
+    }
+
   private:
    std::vector<vec2> chain;
    Direction direction;
@@ -118,7 +183,13 @@ constexpr const auto kQuant = 1000ms;
 
 class Game {
   public:
-    Game() : snake({0, 0}) {
+    Game() :
+     game_field(24, 24),
+     snake({game_field.GetWidth()/2, game_field.GetHeight() / 2}) {
+      renderable.push_back(&game_field);
+      renderable.push_back(&snake);
+
+      updatable.push_back(&snake);
     }
 
     ~Game() = default;
@@ -128,16 +199,44 @@ class Game {
       for (Updatable* u: updatable) {
           u->Update(quant);
       }
+      // Check rule:
+      const vec2& head = snake.GetHead();
+      if (head.x < 0 || head.x >= game_field.GetWidth()) {
+        return;
+      }
+      if (head.y < 0 || head.y >= game_field.GetHeight()) {
+        is_over = true;
+        return;
+      }
+      for (size_t i = 1; i < snake.GetChain().size(); ++i) {
+        if (snake.GetChain()[i] == head) {
+          is_over = true;
+          return;
+        }
+      }
     }
 
     void Render() {
       for (Renderable* r: renderable) {
         r->Render();
       }
+      refresh();
     }
 
     void HandleInput() {
-
+      SDL_Event event;
+      while (SDL_PollEvent(&event)) {
+      switch (event.type) {
+        case SDL_QUIT: is_over = true; break;
+        case SDL_KEYDOWN:
+        switch (event.key.keysym.sym) {
+          case KEY_UP: snake.SetDirection(UP); break;
+          case KEY_DOWN: snake.SetDirection(DOWN); break;
+          case KEY_LEFT: snake.SetDirection(LEFT); break;
+          case KEY_RIGHT: snake.SetDirection(RIGHT); break;
+        }
+      }
+      }
     }
 
     bool IsOver() const {
@@ -145,8 +244,8 @@ class Game {
     }
 
   private:
-   Snake snake;
    GameField game_field;
+   Snake snake;
 
    std::vector<Updatable*> updatable;
    std::vector<Renderable*> renderable;
@@ -155,11 +254,11 @@ class Game {
 
 int main (int argc, char *argv[])
 {
-
     int gd = SDL;
     int gm = SDL_800x600;
     char s[] = "";
     initgraph (&gd, &gm, s);
+    sdlbgifast();
     setbkcolor (BLACK);
     cleardevice ();
 
@@ -168,19 +267,23 @@ int main (int argc, char *argv[])
     Game game;
     auto ticks = clock::now();
     while (!game.IsOver()) {
-      auto delta = clock::now() - ticks;
+      cleardevice();
+      /*auto delta = clock::now() - ticks;
       ticks = clock::now();
       if (delta < kQuant) {
         std::this_thread::sleep_for(kQuant / 2);
-      }
+      }*/
       game.Render();
-      refresh();
       game.HandleInput();
+      game.Update(16);
+      SDL_Delay(120);
 
-      while (delta >= kQuant) {
+
+
+      /*while (delta >= kQuant) {
         game.Update(std::chrono::duration_cast<std::chrono::milliseconds>(kQuant).count());
         delta -= kQuant;
-      }
+      }*/
     }
 
     closegraph ();
