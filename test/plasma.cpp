@@ -8,13 +8,37 @@ class Cell {
   public:
    virtual ~Cell() = default;
    virtual void Render(int x, int y) = 0;
+
+   void OnVisit(std::function<void()> on_visit) {
+     this->on_visit = std::move(on_visit);
+   }
+
+   void Visit() {
+     if (on_visit) {
+       on_visit();
+     }
+   }
+
+  private:
+   std::function<void()> on_visit;
 };
 
 class EmptyCell : public Cell {
   public:
   void Render(int x, int y) override {
-
+    setcolor(WHITE);
+    rectangle(x * 24, y * 24, (x+1) * 24, (y+1) * 24);
   }
+};
+
+class AppleCell : public Cell {
+  public:
+   void Render(int x, int y) {
+    setcolor(WHITE);
+    rectangle(x * 24, y * 24, (x+1) * 24, (y+1) * 24);
+    setfillstyle(SOLID_FILL, RED);
+    bar(x * 24 + 3, y*24 + 3, (x+1)*24 -3, (y+1) * 24 - 3);
+   }
 };
 
 class GameField {
@@ -27,6 +51,7 @@ class GameField {
          cell = std::make_unique<EmptyCell>();
        }
      }
+     fields[3][3] = std::make_unique<AppleCell>();
    }
 
    int GetWidth() const { return fields.size(); }
@@ -39,6 +64,17 @@ class GameField {
           fields[x][y]->Render(x , y);
        }
      }
+   }
+
+   Cell* GetCell(int x, int y) const {
+     if (x < 0 || x >= fields.size()) return nullptr;
+     if (y < 0 || y >= fields[x].size()) return nullptr;
+     return fields[x][y].get();
+   }
+
+   Cell* SetCell(int x, int y, Cell* cell) {
+     fields[x][y].reset(cell);
+     return fields[x][y].get();
    }
 
   private:
@@ -68,18 +104,29 @@ class Snake {
      return units;
    }
 
+   const Coords& GetHead() const {
+     return units[0];
+   }
+
    void SetDirection(Direction dir) {
      if (direction != NONE && dir == NONE)
        return;
      if (direction == UP && dir == DOWN)
        return;
+     if (direction == DOWN && dir == UP)
+       return;
+     if (direction == LEFT && dir == RIGHT)
+       return;
+     if (direction == RIGHT && dir == LEFT)
+       return;
      direction = dir;
    }
 
-   void UpdateState() {
-     if (direction == NONE)
-       return;
+   void Grow(int count) {
+     grow += count;
+   }
 
+   void UpdateState() {
      Coords new_head = units[0];
      switch (direction) {
        case NONE: return;
@@ -89,37 +136,76 @@ class Snake {
        case LEFT: new_head.x--; break;
      }
      units.insert(units.begin(), new_head);
+     if (grow > 0) {
+       --grow;
+       return;
+     }
+
      units.pop_back();
    }
 
    void Render() {
-
+      for (const Coords& u: units) {
+        setcolor(YELLOW);
+        circle(u.x * 24 + 12, u.y *24 + 12, 7);
+      }
    }
 
   private:
    Direction direction;
    std::vector<Coords> units;
+   int grow = 0;
 };
 
 class Game {
   public:
-   Game() : snake({game_field.GetWidth()/2, game_field.GetHeight()/2}) {}
+   Game() : snake({game_field.GetWidth() >> 1, game_field.GetHeight() >> 1}) {
+     game_field.SetCell(3, 3, new AppleCell)->OnVisit(
+       [this]() {
+         game_field.SetCell(3, 3, new EmptyCell);
+         snake.Grow(5);
+       }
+    );
+   }
 
    bool IsOver() const {
      return is_over;
    }
 
    void Render() {
+     setbkcolor(BLACK);
+     cleardevice();
      game_field.Render();
      snake.Render();
+     refresh();
    }
 
    void ProcessInput() {
+     SDL_Event event;
+     while (SDL_PollEvent(&event)) {
+       if (event.type == SDL_QUIT) {
+         is_over = true;
+         return;
+       }
+     }
+     const Uint8 *state = SDL_GetKeyboardState(nullptr);
+     if (state[SDL_SCANCODE_RIGHT]) {
+       snake.SetDirection(RIGHT);
+     } else if (state[SDL_SCANCODE_LEFT]) {
+       snake.SetDirection(LEFT);
+     } else if (state[SDL_SCANCODE_UP]) {
+       snake.SetDirection(UP);
+     } else if (state[SDL_SCANCODE_DOWN]) {
+       snake.SetDirection(DOWN);
+     }
    }
 
    void UpdateState(int dt) {
      snake.UpdateState();
      CheckRules();
+     if (Cell* cell = game_field.GetCell(snake.GetHead().x, snake.GetHead().y)) {
+       cell->Visit();
+     }
    }
 
   private:
@@ -136,11 +222,20 @@ class Game {
 int GetTicks();
 
 int main (int argc, char *argv[]) {
+
+  int gd = SDL;
+  int gm = SDL_800x600;
+  initgraph (&gd, &gm, (char*)"Snake");
+  sdlbgifast();
+
   Game game;
   while (!game.IsOver()) {
     game.ProcessInput();
     game.Render();
     game.UpdateState(16);
+    SDL_Delay(80);
   }
+
+  closegraph();
   return 0;
 }
