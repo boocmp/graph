@@ -1,5 +1,6 @@
 #include <vector>
 #include <memory>
+#include <functional>
 #include <graphics.h>
 
 #undef main
@@ -10,7 +11,7 @@ class Cell {
    virtual void Render(int x, int y) = 0;
 
    void OnVisit(std::function<void()> on_visit) {
-     this->on_visit = std::move(on_visit);
+     this->on_visit = on_visit;
    }
 
    void Visit() {
@@ -51,7 +52,6 @@ class GameField {
          cell = std::make_unique<EmptyCell>();
        }
      }
-     fields[3][3] = std::make_unique<AppleCell>();
    }
 
    int GetWidth() const { return fields.size(); }
@@ -159,13 +159,27 @@ class Snake {
 
 class Game {
   public:
-   Game() : snake({game_field.GetWidth() >> 1, game_field.GetHeight() >> 1}) {
-     game_field.SetCell(3, 3, new AppleCell)->OnVisit(
-       [this]() {
-         game_field.SetCell(3, 3, new EmptyCell);
+
+   void AddApple() {
+     int x = rand()%game_field.GetWidth();
+     int y = rand()%game_field.GetHeight();
+     while (x == snake.GetHead().x && y == snake.GetHead().y) {
+       x = rand()%game_field.GetWidth();
+       y = rand()%game_field.GetHeight();
+     }
+     auto* apple = new AppleCell;
+     apple->OnVisit([this,x, y]() {
+       game_field.SetCell(x, y, new EmptyCell);
          snake.Grow(5);
-       }
-    );
+        AddApple();
+     } );
+     game_field.SetCell(x, y, apple);
+    }
+
+   Game() : snake({game_field.GetWidth() >> 1, game_field.GetHeight() >> 1}) {
+      srand(time(nullptr));
+      AddApple();
+      AddApple();
    }
 
    bool IsOver() const {
